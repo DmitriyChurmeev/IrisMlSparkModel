@@ -6,8 +6,7 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.sql.Row
-
+import org.apache.spark.sql.{DataFrame, Row}
 
 object IrisMlSparkModel extends App {
 
@@ -15,23 +14,7 @@ object IrisMlSparkModel extends App {
 
   def main(args: Array[String]) = {
 
-    val irisDf = spark.sparkContext
-      .textFile("src/main/resources/IRIS.csv")
-      .mapPartitionsWithIndex {
-        (idx, iter) => if (idx == 0) iter.drop(1) else iter
-      }
-
-    val irisRdd = irisDf
-      .flatMap {
-        text =>
-          text.split("\n").toList.map(_.split(",")).collect {
-            case Array(sepal_length, sepal_width, petal_length, petal_width, species) =>
-              (Vectors.dense(sepal_length.toDouble, sepal_width.toDouble, petal_length.toDouble, petal_width.toDouble), species)
-          }
-      }
-
-
-    val irisDataFrame = spark.createDataFrame(irisRdd).toDF("iris_data", "iris_type")
+    val irisDataFrame = getData("src/main/resources/IRIS.csv")
 
     val (trainingData, testData) = {
       val split = irisDataFrame.randomSplit(Array(0.8, 0.2))
@@ -71,9 +54,9 @@ object IrisMlSparkModel extends App {
 
     val multiclassMetrics = new MulticlassMetrics(predAndLabels)
 
-    println(s"F1 Measure ${multiclassMetrics.weightedFMeasure}")
-    println(s"Recall ${multiclassMetrics.weightedRecall}")
-    println(s"Precision ${multiclassMetrics.weightedPrecision}")
+    println(s"F1 Measure (эффективность) ${multiclassMetrics.weightedFMeasure}")
+    println(s"Recall (полнота) ${multiclassMetrics.weightedRecall}")
+    println(s"Precision (точность) ${multiclassMetrics.weightedPrecision}")
 
   }
 
@@ -96,5 +79,30 @@ object IrisMlSparkModel extends App {
       .setEvaluator(new MulticlassClassificationEvaluator())
       .setEstimatorParamMaps(paramGrid)
       .setTrainRatio(0.8)
+  }
+
+
+  /**
+   * Получение DataFrame (Vectors данных и тип) из файла
+   * @param path путь до файла
+   * @return DataFrame
+   */
+  def getData(path: String): DataFrame = {
+    val irisDf = spark.sparkContext
+      .textFile(path)
+      .mapPartitionsWithIndex {
+        (idx, iter) => if (idx == 0) iter.drop(1) else iter
+      }
+
+    val irisRdd = irisDf
+      .flatMap {
+        text =>
+          text.split("\n").toList.map(_.split(",")).collect {
+            case Array(sepal_length, sepal_width, petal_length, petal_width, species) =>
+              (Vectors.dense(sepal_length.toDouble, sepal_width.toDouble, petal_length.toDouble, petal_width.toDouble), species)
+          }
+      }
+
+    spark.createDataFrame(irisRdd).toDF("iris_data", "iris_type")
   }
 }
